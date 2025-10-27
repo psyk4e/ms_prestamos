@@ -1,0 +1,28 @@
+// SQL Server Prisma schema file
+// This schema manages the legacy SQL Server database
+
+generator sqlserver_client {
+  provider = "prisma-client-js"
+  output   = "../../node_modules/@prisma-sqlserver/client"
+}
+
+datasource sqlserver_db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo basado en la vista View_creditos_atrasados
+model ViewCreditosAtrasados {
+  id            Int      @id @default(autoincrement())
+  cliente       String   @map("CLIENTE")
+  cantCuotas    Int      @map("CANT_CUOTAS")
+  concepto      String   @default("Notificación de atraso en cuota") @map("CONCEPTO")
+  desde         DateTime @map("DESDE")
+  totalAdeudado Decimal  @map("TotalAdeudado")
+  numCredito    Int      @map("num_credito")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([cliente])
+  @@map("View_creditos_atrasados")
+}
