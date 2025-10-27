@@ -2,11 +2,12 @@ import { IWebhookLogService, WebhookLogData } from '../../domain/interfaces/IWeb
 import * as Sentry from '@sentry/node';
 import { randomUUID } from 'crypto';
 import { alertsManager, SentryAlertsManager } from '../config/SentryAlertsConfig';
+import { logger } from './CustomLogger';
 
 // Enum para niveles de logging profesionales
 enum LogLevel {
   DEBUG = 'debug',
-  INFO = 'info', 
+  INFO = 'info',
   WARN = 'warning',
   ERROR = 'error',
   CRITICAL = 'fatal'
@@ -28,7 +29,7 @@ export class SentryLogService implements IWebhookLogService {
   private readonly serviceName = 'ms-prestamos-webhook';
   private readonly serviceVersion = process.env.npm_package_version || '1.0.0';
   private readonly environment = process.env.NODE_ENV || 'development';
-  
+
   // Endpoints que no requieren logging detallado (filtros)
   private readonly lowPriorityEndpoints = [
     '/health',
@@ -36,7 +37,7 @@ export class SentryLogService implements IWebhookLogService {
     '/metrics',
     '/favicon.ico'
   ];
-  
+
   // Rate limiting para logs (evitar spam)
   private readonly logRateLimit = new Map<string, number>();
   private readonly rateLimitWindow = 60000; // 1 minuto
@@ -61,20 +62,20 @@ export class SentryLogService implements IWebhookLogService {
 
       // Generar metadatos de auditoría
       const auditMetadata = this.generateAuditMetadata(data);
-      
+
       // Determinar nivel de log profesional
       const logLevel = this.determineLogLevel(data);
-      
+
       // Solo enviar a Sentry logs importantes (WARN, ERROR, CRITICAL)
       if (this.shouldSendToSentry(logLevel)) {
         await this.sendToSentry(data, auditMetadata, logLevel);
       }
-      
+
       // Log estructurado en consola para desarrollo
       if (this.environment === 'development') {
-        this.logToConsole(data, auditMetadata, logLevel);
+        await this.logToConsole(data, auditMetadata, logLevel);
       }
-      
+
     } catch (error) {
       // Fallback logging crítico
       console.error('[SENTRY_LOG_ERROR]', {
@@ -87,7 +88,7 @@ export class SentryLogService implements IWebhookLogService {
 
   private shouldSkipLogging(data: WebhookLogData): boolean {
     // Filtrar endpoints de baja prioridad
-    return this.lowPriorityEndpoints.some(endpoint => 
+    return this.lowPriorityEndpoints.some(endpoint =>
       data.endpoint.includes(endpoint)
     );
   }
@@ -96,23 +97,23 @@ export class SentryLogService implements IWebhookLogService {
     const key = `${data.ip}-${data.endpoint}`;
     const now = Date.now();
     const windowStart = now - this.rateLimitWindow;
-    
+
     // Limpiar entradas antiguas
     for (const [k, timestamp] of this.logRateLimit.entries()) {
       if (timestamp < windowStart) {
         this.logRateLimit.delete(k);
       }
     }
-    
+
     // Contar logs en la ventana actual
     const logsInWindow = Array.from(this.logRateLimit.entries())
       .filter(([k]) => k.startsWith(`${data.ip}-`))
       .length;
-    
+
     if (logsInWindow >= this.maxLogsPerWindow) {
       return true;
     }
-    
+
     this.logRateLimit.set(key, now);
     return false;
   }
@@ -144,12 +145,12 @@ export class SentryLogService implements IWebhookLogService {
       }
       return LogLevel.ERROR;
     }
-    
+
     // Para requests exitosos, usar INFO solo para endpoints importantes
     if (data.endpoint.includes('/webhook/credito')) {
       return LogLevel.INFO;
     }
-    
+
     return LogLevel.DEBUG;
   }
 
@@ -168,7 +169,7 @@ export class SentryLogService implements IWebhookLogService {
       scope.setTag('webhook.success', data.success);
       scope.setTag('log.level', level);
       scope.setTag('trace.id', metadata.traceId);
-      
+
       // Contexto de auditoría completo
       scope.setContext('audit', metadata as any);
       scope.setContext('webhook', {
@@ -180,36 +181,36 @@ export class SentryLogService implements IWebhookLogService {
         responseTime: 0, // No disponible en WebhookLogData
         statusCode: data.success ? 200 : 500
       });
-      
+
       // Contexto de negocio
       scope.setContext('business', {
         operation: this.extractBusinessOperation(data.endpoint),
         criticality: this.getBusinessCriticality(data.endpoint),
         dataClassification: 'confidential'
       });
-      
+
       // Usuario para trazabilidad
       scope.setUser({
         ip_address: data.ip,
         userAgent: data.userAgent,
         sessionId: metadata.sessionId
       });
-      
+
       // Fingerprint para agrupación inteligente
       scope.setFingerprint([
         data.endpoint,
         data.method,
         data.success ? 'success' : 'failure'
       ]);
-      
+
       // Mensaje estructurado
       const message = this.createStructuredMessage(data, metadata, level);
-      
+
       // Verificar alertas antes de capturar (sin await para evitar bloqueo)
       this.checkAndTriggerAlerts(data, level, message, metadata).catch(error => {
         console.error('Error in alert checking:', error);
       });
-      
+
       // Capturar según el nivel
       if (level === LogLevel.CRITICAL) {
         Sentry.captureException(new Error(message));
@@ -236,11 +237,11 @@ export class SentryLogService implements IWebhookLogService {
   private createStructuredMessage(data: WebhookLogData, metadata: AuditMetadata, level: LogLevel): string {
     const operation = this.extractBusinessOperation(data.endpoint);
     const status = data.success ? 'SUCCESS' : 'FAILED';
-    
+
     return `[${level.toUpperCase()}] ${operation} | ${data.method} ${data.endpoint} | ${status} | TraceID: ${metadata.traceId}`;
   }
 
-  private logToConsole(data: WebhookLogData, metadata: AuditMetadata, level: LogLevel): void {
+  private async logToConsole(data: WebhookLogData, metadata: AuditMetadata, level: LogLevel): Promise<void> {
     const logEntry = {
       level: level.toUpperCase(),
       timestamp: metadata.timestamp,
@@ -255,8 +256,10 @@ export class SentryLogService implements IWebhookLogService {
       },
       audit: metadata
     };
-    
-    console.log(JSON.stringify(logEntry, null, 2));
+
+    await logger.info('Sentry log entry created', {
+      logEntry: logEntry
+    });
   }
 
   async getLogsByEndpoint(endpoint: string, limit: number = 100): Promise<any[]> {
@@ -269,9 +272,9 @@ export class SentryLogService implements IWebhookLogService {
 
   // Verificar y disparar alertas según umbrales configurados
   private async checkAndTriggerAlerts(
-    data: WebhookLogData, 
-    level: LogLevel, 
-    message: string, 
+    data: WebhookLogData,
+    level: LogLevel,
+    message: string,
     metadata: AuditMetadata
   ): Promise<void> {
     try {
@@ -290,7 +293,7 @@ export class SentryLogService implements IWebhookLogService {
           );
         }
       }
-      
+
       // Alertas por fallos de autenticación
       if (!data.success && data.endpoint.includes('/webhook/')) {
         if (this.alertsManager.shouldTriggerAlert('authenticationFailures', 'warning')) {
@@ -305,7 +308,7 @@ export class SentryLogService implements IWebhookLogService {
           );
         }
       }
-      
+
       // Alertas por operaciones críticas de negocio
       if (this.isBusinessCriticalOperation(data.endpoint) && !data.success) {
         if (this.alertsManager.shouldTriggerAlert('businessCriticalOperations', 'error')) {
@@ -320,12 +323,12 @@ export class SentryLogService implements IWebhookLogService {
           );
         }
       }
-      
+
     } catch (error) {
       console.error('Error checking alerts:', error);
     }
   }
-  
+
   // Verificar si es una operación crítica de negocio
   private isBusinessCriticalOperation(endpoint: string): boolean {
     const criticalPatterns = [
@@ -334,10 +337,10 @@ export class SentryLogService implements IWebhookLogService {
       '/api/v1/payments/',
       '/api/v1/transactions/'
     ];
-    
+
     return criticalPatterns.some(pattern => endpoint.includes(pattern));
   }
-  
+
   // Obtener estadísticas de fallos de autenticación recientes
   private getRecentAuthFailures(): any {
     // Implementar lógica para obtener fallos recientes

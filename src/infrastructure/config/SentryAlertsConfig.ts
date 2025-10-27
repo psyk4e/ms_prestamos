@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/node';
+import { logger } from '../services/CustomLogger';
 
 // Configuración de alertas y umbrales para logs críticos
 export interface AlertThreshold {
@@ -86,7 +87,7 @@ export class SentryAlertsManager {
   // Verificar si se debe enviar una alerta
   shouldTriggerAlert(alertType: keyof SentryAlertsConfig['thresholds'], level: string): boolean {
     const threshold = this.config.thresholds[alertType];
-    
+
     if (!threshold.enabled || threshold.level !== level) {
       return false;
     }
@@ -94,23 +95,23 @@ export class SentryAlertsManager {
     const now = Date.now();
     const windowMs = threshold.timeWindow * 60 * 1000;
     const key = `${alertType}-${level}`;
-    
+
     // Obtener o crear contador
     let counter = this.alertCounters.get(key);
     if (!counter || (now - counter.windowStart) > windowMs) {
       counter = { count: 0, windowStart: now };
       this.alertCounters.set(key, counter);
     }
-    
+
     counter.count++;
-    
+
     // Verificar si se alcanzó el umbral
     if (counter.count >= threshold.count) {
       // Resetear contador para evitar spam de alertas
       this.alertCounters.set(key, { count: 0, windowStart: now });
       return true;
     }
-    
+
     return false;
   }
 
@@ -122,7 +123,7 @@ export class SentryAlertsManager {
         scope.setTag('alert.type', 'critical');
         scope.setTag('alert.priority', 'high');
         scope.setLevel('fatal');
-        
+
         scope.setContext('alert', {
           message,
           timestamp: new Date().toISOString(),
@@ -130,14 +131,14 @@ export class SentryAlertsManager {
           service: 'ms-prestamos-webhook',
           ...context
         });
-        
+
         // Capturar como excepción crítica
         Sentry.captureException(new Error(`CRITICAL ALERT: ${message}`));
       });
-      
+
       // Enviar notificaciones adicionales si están configuradas
       await this.sendExternalNotifications(message, context, 'critical');
-      
+
     } catch (error) {
       console.error('Error sending critical alert:', error);
     }
@@ -155,9 +156,12 @@ export class SentryAlertsManager {
       timestamp: new Date().toISOString(),
       recipients: this.config.notifications
     };
-    
-    console.log('[EXTERNAL_NOTIFICATION]', JSON.stringify(notification, null, 2));
-    
+
+    await logger.info('External notification sent', {
+      notificationType: 'EXTERNAL_NOTIFICATION',
+      notification: notification
+    });
+
     // TODO: Implementar envío real de emails y Slack
     // - Integración con SendGrid/AWS SES para emails
     // - Webhook de Slack para notificaciones
@@ -174,11 +178,11 @@ export class SentryAlertsManager {
   // Obtener estadísticas de alertas
   getAlertStats(): { [key: string]: { count: number; windowStart: number } } {
     const stats: { [key: string]: { count: number; windowStart: number } } = {};
-    
+
     for (const [key, value] of this.alertCounters.entries()) {
       stats[key] = { ...value };
     }
-    
+
     return stats;
   }
 
@@ -186,7 +190,7 @@ export class SentryAlertsManager {
   cleanupOldCounters(): void {
     const now = Date.now();
     const maxAge = 60 * 60 * 1000; // 1 hora
-    
+
     for (const [key, counter] of this.alertCounters.entries()) {
       if ((now - counter.windowStart) > maxAge) {
         this.alertCounters.delete(key);

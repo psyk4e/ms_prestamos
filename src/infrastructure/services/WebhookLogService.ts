@@ -1,10 +1,18 @@
 import { IWebhookLogService, WebhookLogData } from '../../domain/interfaces/IWebhookLogService';
 import { prisma } from '../database/PrismaClient';
+import { logger } from './CustomLogger';
 
 export class WebhookLogService implements IWebhookLogService {
   async log(data: WebhookLogData): Promise<void> {
-    // Log solo en consola ya que no tenemos permisos de escritura en la BD
-    console.log(`[${new Date().toISOString()}] ${data.method} ${data.endpoint} - ${data.success ? 'SUCCESS' : 'FAILED'} - ${data.ip}`);
+    // Log using custom logger
+    await logger.info('Webhook request processed', {
+      method: data.method,
+      endpoint: data.endpoint,
+      success: data.success,
+      ip: data.ip,
+      timestamp: new Date().toISOString(),
+      response: data.response
+    });
   }
 
   async getLogsByEndpoint(endpoint: string, limit: number = 100): Promise<any[]> {
