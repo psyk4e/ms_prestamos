@@ -1,19 +1,23 @@
 import { Router } from 'express';
 import { WebhookController } from '../controllers/WebhookController';
+import { AcuerdoPagoController } from '../controllers/AcuerdoPagoController';
 import { AuthMiddleware } from '../middleware/AuthMiddleware';
 import { SecurityMiddleware } from '../middleware/SecurityMiddleware';
 
 export class WebhookRoutes {
   private router: Router;
   private webhookController: WebhookController;
+  private acuerdoPagoController: AcuerdoPagoController;
   private authMiddleware: AuthMiddleware;
 
   constructor(
     webhookController: WebhookController,
+    acuerdoPagoController: AcuerdoPagoController,
     authMiddleware: AuthMiddleware
   ) {
     this.router = Router();
     this.webhookController = webhookController;
+    this.acuerdoPagoController = acuerdoPagoController;
     this.authMiddleware = authMiddleware;
     this.initializeRoutes();
   }
@@ -39,6 +43,12 @@ export class WebhookRoutes {
       this.webhookController.getCreditosByCliente
     );
 
+    // GET /webhook/creditos/identificacion - Obtener créditos por número de identificación
+    this.router.get(
+      '/creditos/identificacion',
+      this.webhookController.getCreditosByIdentificacion
+    );
+
     // GET /webhook/creditos - Obtener todos los créditos con filtros opcionales
     this.router.get(
       '/creditos',
@@ -49,6 +59,25 @@ export class WebhookRoutes {
     this.router.post(
       '/credito',
       this.webhookController.postCreditoQuery
+    );
+
+    // Payment Agreement Routes
+    // POST /webhook/acuerdos-pago - Create new payment agreement
+    this.router.post(
+      '/acuerdos-pago',
+      this.acuerdoPagoController.createAcuerdoPago
+    );
+
+    // GET /webhook/acuerdos-pago/credito/:creditoId - Get agreements by credit ID
+    this.router.get(
+      '/acuerdos-pago/credito/:creditoId',
+      this.acuerdoPagoController.getAcuerdosByCreditoId
+    );
+
+    // GET /webhook/acuerdos-pago/cliente/:clienteId - Get agreements by client ID
+    this.router.get(
+      '/acuerdos-pago/cliente/:clienteId',
+      this.acuerdoPagoController.getAcuerdosByClienteId
     );
 
     // Ruta de health check específica para webhook (sin autenticación)

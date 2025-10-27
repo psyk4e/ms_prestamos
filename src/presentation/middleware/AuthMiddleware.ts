@@ -7,7 +7,7 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export class AuthMiddleware {
-  constructor(private readonly webhookLogService: IWebhookLogService) {}
+  constructor(private readonly webhookLogService: IWebhookLogService) { }
 
   authenticate = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -29,7 +29,7 @@ export class AuthMiddleware {
       if (!authKey) {
         logData.response = { error: 'Auth key is required' };
         await this.webhookLogService.log(logData);
-        
+
         res.status(401).json({
           error: 'Unauthorized',
           message: 'Auth key is required. Provide it via x-auth-key header or authKey query parameter.',
@@ -41,7 +41,7 @@ export class AuthMiddleware {
       if (authKey !== config.authKey) {
         logData.response = { error: 'Invalid auth key' };
         await this.webhookLogService.log(logData);
-        
+
         res.status(401).json({
           error: 'Unauthorized',
           message: 'Invalid auth key provided.',
@@ -55,7 +55,7 @@ export class AuthMiddleware {
       logData.success = true;
       logData.response = { message: 'Authentication successful' };
       await this.webhookLogService.log(logData);
-      
+
       next();
     } catch (error) {
       console.error('Authentication error:', error);
@@ -70,13 +70,13 @@ export class AuthMiddleware {
   // Middleware opcional para rutas que no requieren autenticación estricta
   optionalAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     const authKey = req.headers['x-auth-key'] as string || req.query.authKey as string;
-    
+
     if (authKey && authKey === config.authKey) {
       req.isAuthenticated = true;
     } else {
       req.isAuthenticated = false;
     }
-    
+
     next();
   };
 }

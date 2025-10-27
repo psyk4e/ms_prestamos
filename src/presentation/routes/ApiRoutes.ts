@@ -127,6 +127,14 @@ export class ApiRoutes {
             },
             example: '/webhook/cliente/Juan%20Perez'
           },
+          '/webhook/creditos/identificacion': {
+            method: 'GET',
+            description: 'Obtiene todos los créditos atrasados por número de identificación',
+            queryParameters: {
+              identificacion: 'Número de identificación del cliente (string)'
+            },
+            example: '/webhook/creditos/identificacion?identificacion=12345678'
+          },
           '/webhook/creditos': {
             method: 'GET',
             description: 'Obtiene créditos con filtros opcionales y paginación',

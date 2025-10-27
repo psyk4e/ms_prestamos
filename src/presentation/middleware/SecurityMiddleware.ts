@@ -4,6 +4,7 @@ import cors from 'cors';
 import compression from 'compression';
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../../infrastructure/config/AppConfig';
+import { logger } from '../../infrastructure/services/CustomLogger';
 
 export class SecurityMiddleware {
   // Rate limiting middleware
@@ -96,7 +97,14 @@ export class SecurityMiddleware {
       const logMessage = `${req.method} ${req.originalUrl} - ${res.statusCode} - ${clientIp} - ${duration}ms`;
 
       if (config.nodeEnv === 'development') {
-        console.log(`[${new Date().toISOString()}] ${logMessage}`);
+        logger.warn('Security middleware blocked request', {
+          timestamp: new Date().toISOString(),
+          message: logMessage,
+          ip: req.ip,
+          userAgent: req.get('User-Agent'),
+          path: req.path,
+          method: req.method
+        });
       }
     });
 
