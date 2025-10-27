@@ -2,10 +2,12 @@ import { CreditoAtrasado, CreditoAtrasadoFilter } from '../entities/CreditoAtras
 
 export interface ICreditoAtrasadoRepository {
   findByNumCredito(numCredito: number): Promise<CreditoAtrasado | null>;
-  findByCliente(cliente: string): Promise<CreditoAtrasado[]>;
-  findAll(filter?: CreditoAtrasadoFilter): Promise<CreditoAtrasado[]>;
+  findByCliente(cliente: string, notificationType?: 'early' | 'late'): Promise<CreditoAtrasado[]>;
+  findByIdentificacion(identificacion: string): Promise<CreditoAtrasado[]>;
+  findAll(filter?: CreditoAtrasadoFilter, notificationType?: 'early' | 'late'): Promise<CreditoAtrasado[]>;
   findWithPagination(
     filter?: CreditoAtrasadoFilter,
+    notificationType?: 'early' | 'late',
     page?: number,
     limit?: number
   ): Promise<{

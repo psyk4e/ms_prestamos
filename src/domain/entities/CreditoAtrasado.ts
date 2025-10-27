@@ -1,11 +1,14 @@
 export interface CreditoAtrasado {
   creditoId: number;
   clienteId: string;
-  cliente: string;
+  nombre: string;
   cuotasVencidas: number;
   concepto: string;
   desde: Date;
   ponerseAlDia: number;
+  cuotas: number;
+  saldoCancelacion: number;
+  phoneNumber: string;
 }
 
 export interface CreditoAtrasadoFilter {
@@ -18,9 +21,16 @@ export interface CreditoAtrasadoFilter {
 export interface CreditoAtrasadoResponse {
   creditoId: number;
   clienteId: string;
-  cliente: string;
+  nombre: string;
   cuotasVencidas: number;
   concepto: string;
   desde: Date;
   ponerseAlDia: number;
+  phoneNumber: string;
+  saldoCancelacion: number;
+  cuotas?: {
+    min: number;
+    max: number;
+    cantidad: number;
+  };
 }
