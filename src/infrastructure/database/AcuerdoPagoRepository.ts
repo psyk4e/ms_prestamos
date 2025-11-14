@@ -94,7 +94,7 @@ export class AcuerdoPagoRepository implements IAcuerdoPagoRepository {
       ORDER BY createdAt DESC
     `;
 
-    return result.map(item => this.mapToDomain(item));
+    return result.map((item: any) => this.mapToDomain(item));
   }
 
   /**
@@ -118,7 +118,7 @@ export class AcuerdoPagoRepository implements IAcuerdoPagoRepository {
       ORDER BY createdAt DESC
     `;
 
-    return result.map(item => this.mapToDomain(item));
+    return result.map((item: any) => this.mapToDomain(item));
   }
 
   /**
@@ -168,7 +168,7 @@ export class AcuerdoPagoRepository implements IAcuerdoPagoRepository {
     `;
 
     const result = await prisma.$queryRawUnsafe<any[]>(query);
-    return result.map(item => this.mapToDomain(item));
+    return result.map((item: any) => this.mapToDomain(item));
   }
 
   /**

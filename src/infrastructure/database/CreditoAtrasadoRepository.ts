@@ -9,7 +9,7 @@ export class CreditoAtrasadoRepository implements ICreditoAtrasadoRepository {
       FROM View_creditos_atrasados
       WHERE num_credito = ${numCredito}
     `;
-    return result.map((item) => this.mapToDomain(item))[0] || null;
+    return result.map((item: any) => this.mapToDomain(item))[0] || null;
   }
 
   /**
@@ -48,7 +48,7 @@ export class CreditoAtrasadoRepository implements ICreditoAtrasadoRepository {
       WHERE ${whereClause}
     `);
 
-    return result.map((item) => this.mapToDomain(item));
+    return result.map((item: any) => this.mapToDomain(item));
   }
 
   /**
@@ -63,7 +63,7 @@ export class CreditoAtrasadoRepository implements ICreditoAtrasadoRepository {
       FROM View_creditos_atrasados
       WHERE identificacion = ${identificacion}
     `;
-    return result.map((item) => this.mapToDomain(item));
+    return result.map((item: any) => this.mapToDomain(item));
   }
 
   /**

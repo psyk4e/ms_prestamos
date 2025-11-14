@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma-sqlserver/client';
 
 class DatabaseConnection {
   private static instance: PrismaClient;
