@@ -156,7 +156,7 @@ class App {
   public async start(): Promise<void> {
     try {
       // Verificar conexión a la base de datos
-      await this.checkDatabaseConnection();
+      // await this.checkDatabaseConnection();
 
       // Iniciar servidor
       this.app.listen(this.port, async () => {
