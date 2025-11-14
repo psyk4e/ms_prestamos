@@ -1,185 +1,28 @@
-// PostgreSQL Prisma schema file
-// This schema manages the loan applications and related data
+// SQL Server Prisma schema file
+// This schema manages the legacy SQL Server database
 
-generator postgres_client {
+generator sqlserver_client {
   provider = "prisma-client-js"
-  output   = "../../node_modules/@prisma-postgres/client"
+  output   = "../../node_modules/@prisma-sqlserver/client"
 }
 
-datasource postgres_db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL_POSTGRES")
+datasource sqlserver_db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
 }
 
-// Agent Request model for desktop integration
-model AgentRequest {
-  id           String    @id @default(cuid())
-  externalId   String    @unique @map("external_id")
-  status       String    @default("pending")
-  personalData String?   @map("personal_data")
-  documents    String?   @map("documents")
-  metadata     String?   @map("metadata")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  completedAt  DateTime? @map("completed_at")
+// Modelo basado en la vista View_creditos_atrasados
+model ViewCreditosAtrasados {
+  id            Int      @id @default(autoincrement())
+  cliente       String   @map("CLIENTE")
+  cantCuotas    Int      @map("CANT_CUOTAS")
+  concepto      String   @default("Notificación de atraso en cuota") @map("CONCEPTO")
+  desde         DateTime @map("DESDE")
+  totalAdeudado Decimal  @map("TotalAdeudado")
+  numCredito    Int      @map("num_credito")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  @@index([status])
-  @@index([externalId])
-  @@index([createdAt])
-  @@map("agent_requests")
-}
-
-// Loan application model mapped to public.loan_applications
-model LoanApplication {
-  id                   String    @id @map("id") @postgres_db.Uuid
-  userId               String    @map("user_id")
-  montoSolicitado      Decimal   @map("monto_solicitado")
-  plazoMeses           Int?      @map("plazo_meses")
-  periodoPago          String?   @map("periodo_pago")
-  salarioMensual       Decimal?  @map("salario_mensual")
-  gastosMensuales      Decimal?  @map("gastos_mensuales")
-  tiempoLaborandoMeses Int?      @map("tiempo_laborando_meses")
-  tipoPrestamo         String?   @map("tipo_prestamo")
-  faseActual           String?   @map("fase_actual")
-  bloqueActual         String?   @map("bloque_actual")
-  status               String?   @map("status")
-  completionPercentage Decimal?  @map("completion_percentage")
-  autoActivationReady  Boolean?  @map("auto_activation_ready")
-  createdAt            DateTime? @map("created_at")
-  updatedAt            DateTime? @map("updated_at")
-  submittedAt          DateTime? @map("submitted_at")
-  approvedAt           DateTime? @map("approved_at")
-  rejectedAt           DateTime? @map("rejected_at")
-  trackingNumber       Int       @unique @map("tracking_number")
-
-  // Opposite relation fields
-  creditEvaluations CreditEvaluation[]
-  documents         Document[]
-  personalDetails   PersonalDetail[]
-
-  @@map("loan_applications")
-}
-
-// User model mapped to public.users
-model User {
-  userId              String    @id @map("user_id")
-  identificacion      String?
-  nombre              String?
-  apellido            String?
-  email               String?
-  telefonoSecundario  String?   @map("telefono_secundario")
-  fechaNacimiento     DateTime? @map("fecha_nacimiento") @postgres_db.Date
-  direccion           String?   @map("direccion")
-  ciudad              String?
-  provincia           String?
-  codigoPostal        String?   @map("codigo_postal")
-  estadoCivil         String?   @map("estado_civil")
-  genero              String?
-  nacionalidad        String?
-  profesion           String?
-  nivelEducativo      String?   @map("nivel_educativo")
-  ingresosMensuales   Decimal?  @map("ingresos_mensuales")
-  createdAt           DateTime? @map("created_at")
-  updatedAt           DateTime? @map("updated_at")
-  status              String?
-  blockedUntil        DateTime? @map("blocked_until")
-  blockedReason       String?   @map("blocked_reason")
-  blockedType         String?   @map("blocked_type")
-  externalClientId    String?   @map("external_client_id")
-  clientSource        String?   @map("client_source")
-  isPreRegistered     Boolean?  @map("is_pre_registered")
-  preRegistrationData Json?     @map("pre_registration_data")
-  dataSyncStatus      String?   @map("data_sync_status")
-  lastSyncAt          DateTime? @map("last_sync_at")
-  tipoDocumento       String?   @map("tipo_documento")
-  telefonoPrincipal   String?   @map("telefono_principal")
-
-  @@map("users")
-}
-
-// User address model mapped to public.user_addresses
-model UserAddress {
-  id        Int       @id @map("id")
-  userId    String    @map("user_id")
-  direccion String    @map("direccion")
-  latitud   Decimal?  @map("latitud")
-  longitud  Decimal?  @map("longitud")
-  isPrimary Boolean?  @map("is_primary")
-  createdAt DateTime? @map("created_at")
-  updatedAt DateTime? @map("updated_at")
-
-  @@map("user_addresses")
-}
-
-model CreditEvaluation {
-  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @map("id") @postgres_db.Uuid
-  loanApplicationId  String    @map("loan_application_id") @postgres_db.Uuid
-  evaluationType     String    @default("AUTOMATICA") @map("evaluation_type")
-  evaluationVersion  String    @default("1.0") @map("evaluation_version")
-  evaluationScore    Decimal   @map("evaluation_score")
-  riskLevel          String    @map("risk_level")
-  creditDecision     String    @map("credit_decision")
-  requestedAmount    Decimal   @map("requested_amount")
-  approvedAmount     Decimal?  @map("approved_amount")
-  approvalPercentage Decimal?  @map("approval_percentage")
-  evaluationData     Json      @map("evaluation_data")
-  evaluatedBy        String?   @map("evaluated_by")
-  evaluationNotes    String?   @map("evaluation_notes")
-  isActive           Boolean   @default(true) @map("is_active")
-  createdAt          DateTime? @default(now()) @map("created_at")
-  updatedAt          DateTime? @default(now()) @map("updated_at")
-
-  loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id])
-
-  @@map("credit_evaluations")
-}
-
-model Document {
-  id                String    @id @default(dbgenerated("gen_random_uuid()")) @map("id") @postgres_db.Uuid
-  userId            String    @map("user_id")
-  loanApplicationId String?   @map("loan_application_id") @postgres_db.Uuid
-  documentType      String    @map("document_type")
-  documentName      String    @map("document_name")
-  filePath          String?   @map("file_path")
-  fileUrl           String?   @map("file_url")
-  fileSize          BigInt?   @map("file_size") @postgres_db.BigInt
-  mimeType          String?   @map("mime_type")
-  validationStatus  String?   @default("pending") @map("validation_status")
-  validationNotes   String?   @map("validation_notes")
-  isRequired        Boolean?  @default(true) @map("is_required")
-  uploadedAt        DateTime? @default(now()) @map("uploaded_at")
-  validatedAt       DateTime? @map("validated_at")
-  expiresAt         DateTime? @map("expires_at")
-  createdAt         DateTime? @default(now()) @map("created_at")
-  updatedAt         DateTime? @default(now()) @map("updated_at")
-
-  // user               User        @relation(fields: [userId], references: [userId])
-  loanApplication LoanApplication? @relation(fields: [loanApplicationId], references: [id])
-
-  @@map("documents")
-}
-
-model PersonalDetail {
-  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @map("id") @postgres_db.Uuid
-  userId                String    @map("user_id")
-  loanApplicationId     String?   @map("loan_application_id") @postgres_db.Uuid
-  conyugeNombre         String?   @map("conyuge_nombre")
-  conyugeApellido       String?   @map("conyuge_apellido")
-  conyugeCedula         String?   @map("conyuge_cedula")
-  conyugeTelefono       String?   @map("conyuge_telefono")
-  conyugeEmail          String?   @map("conyuge_email")
-  conyugeTrabajo        String?   @map("conyuge_trabajo")
-  conyugeSalario        Decimal?  @map("conyuge_salario")
-  numeroHijos           Int?      @map("numero_hijos")
-  personasDependientes  Int?      @map("personas_dependientes")
-  tipoVivienda          String?   @map("tipo_vivienda")
-  tiempoResidenciaMeses Int?      @map("tiempo_residencia_meses")
-  createdAt             DateTime? @default(now()) @map("created_at")
-  updatedAt             DateTime? @default(now()) @map("updated_at")
-  conyugeTipoDocumento  String?   @map("conyuge_tipo_documento")
-
-  // user               User            @relation(fields: [userId], references: [userId])
-  loanApplication LoanApplication? @relation(fields: [loanApplicationId], references: [id])
-
-  @@map("personal_details")
+  @@index([cliente])
+  @@map("View_creditos_atrasados")
 }
