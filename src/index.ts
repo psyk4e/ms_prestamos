@@ -153,6 +153,10 @@ class App {
     this.app.use(SecurityMiddleware.errorHandler);
   }
 
+  public getApp(): Application {
+    return this.app;
+  }
+
   public async start(): Promise<void> {
     try {
       // Verificar conexión a la base de datos
@@ -230,9 +234,19 @@ class App {
   }
 }
 
-// Inicializar y ejecutar la aplicación
-const app = new App();
-app.start().catch(async (error) => {
-  await logger.error('❌ Application failed to start', error instanceof Error ? error : new Error(String(error)));
-  process.exit(1);
-});
+// Inicializar la aplicación
+const appInstance = new App();
+const expressApp = appInstance.getApp();
+
+// Para Vercel: exportar la app de Express como default
+// Vercel detectará automáticamente la app y la ejecutará
+export default expressApp;
+
+// Para desarrollo local: iniciar el servidor con app.listen
+// Solo se ejecuta si no estamos en Vercel (donde PORT se asigna automáticamente)
+if (process.env.VERCEL !== '1') {
+  appInstance.start().catch(async (error) => {
+    await logger.error('❌ Application failed to start', error instanceof Error ? error : new Error(String(error)));
+    process.exit(1);
+  });
+}
