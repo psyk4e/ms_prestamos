@@ -3,12 +3,11 @@ import { AgentRequest, AgentRequestFilter, AgentRequestResponse } from '../../do
 import { PrismaClient as PostgresClient } from '@prisma-postgres/client';
 
 // Create PostgreSQL client instance
+// Prisma will automatically use DATABASE_URL_POSTGRES from environment variables
+// as defined in the schema.prisma datasource configuration
 const postgresClient = new PostgresClient({
-  datasources: {
-    postgres_db: {
-      url: process.env.DATABASE_URL_POSTGRES
-    }
-  }
+  log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error'],
+  errorFormat: 'pretty',
 });
 
 export class AgentRequestRepository implements IAgentRequestRepository {
@@ -107,19 +106,19 @@ export class AgentRequestRepository implements IAgentRequestRepository {
 
     const [applications, total] = await Promise.all([
       // Query loan applications
-      (postgresClient as any).loanApplication.findMany({
+      postgresClient.loanApplication.findMany({
         where: whereClause,
         skip,
         take: filter.limit,
         orderBy: { createdAt: 'desc' },
       }),
-      (postgresClient as any).loanApplication.count({ where: whereClause }),
+      postgresClient.loanApplication.count({ where: whereClause }),
     ]);
 
     // Fetch users in batch
     const userIds = applications.map((a: any) => a.userId).filter(Boolean);
     const users = userIds.length
-      ? await (postgresClient as any).user.findMany({ where: { userId: { in: userIds } } })
+      ? await postgresClient.user.findMany({ where: { userId: { in: userIds } } })
       : [];
     const userById = new Map(users.map((u: any) => [u.userId, u]));
 
@@ -130,14 +129,14 @@ export class AgentRequestRepository implements IAgentRequestRepository {
   }
 
   async findById(id: string): Promise<AgentRequestResponse | null> {
-    const app = await (postgresClient as any).loanApplication.findUnique({ where: { id } });
+    const app = await postgresClient.loanApplication.findUnique({ where: { id } });
     if (!app) return null;
 
     const [user, personalDetail, evaluation, docs] = await Promise.all([
-      (postgresClient as any).user.findUnique({ where: { userId: app.userId } }),
-      (postgresClient as any).personalDetail.findFirst({ where: { loanApplicationId: id }, orderBy: { updatedAt: 'desc' } }),
-      (postgresClient as any).creditEvaluation.findFirst({ where: { loanApplicationId: id, isActive: true }, orderBy: { updatedAt: 'desc' } }),
-      (postgresClient as any).document.findMany({ where: { loanApplicationId: id }, orderBy: { uploadedAt: 'desc' } }),
+      postgresClient.user.findUnique({ where: { userId: app.userId } }),
+      postgresClient.personalDetail.findFirst({ where: { loanApplicationId: id }, orderBy: { updatedAt: 'desc' } }),
+      postgresClient.creditEvaluation.findFirst({ where: { loanApplicationId: id, isActive: true }, orderBy: { updatedAt: 'desc' } }),
+      postgresClient.document.findMany({ where: { loanApplicationId: id }, orderBy: { uploadedAt: 'desc' } }),
     ]);
 
     return this.mapToResponse(app, user || null, personalDetail || null, evaluation || null, docs || []);
@@ -146,9 +145,9 @@ export class AgentRequestRepository implements IAgentRequestRepository {
   async findByExternalId(externalId: string): Promise<AgentRequestResponse | null> {
     // externalId maps to trackingNumber (int)
     const tracking = Number(externalId);
-    const app = await (postgresClient as any).loanApplication.findFirst({ where: { trackingNumber: tracking } });
+    const app = await postgresClient.loanApplication.findFirst({ where: { trackingNumber: tracking } });
     if (!app) return null;
-    const user = await (postgresClient as any).user.findUnique({ where: { userId: app.userId } });
+    const user = await postgresClient.user.findUnique({ where: { userId: app.userId } });
     return this.mapToResponse(app, user || null);
   }
 
@@ -156,18 +155,18 @@ export class AgentRequestRepository implements IAgentRequestRepository {
     const skip = (page - 1) * limit;
 
     const [applications, total] = await Promise.all([
-      (postgresClient as any).loanApplication.findMany({
+      postgresClient.loanApplication.findMany({
         where: { status },
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      (postgresClient as any).loanApplication.count({ where: { status } }),
+      postgresClient.loanApplication.count({ where: { status } }),
     ]);
 
     const userIds = applications.map((a: any) => a.userId).filter(Boolean);
     const users = userIds.length
-      ? await (postgresClient as any).user.findMany({ where: { userId: { in: userIds } } })
+      ? await postgresClient.user.findMany({ where: { userId: { in: userIds } } })
       : [];
     const userById = new Map(users.map((u: any) => [u.userId, u]));
 
@@ -178,18 +177,18 @@ export class AgentRequestRepository implements IAgentRequestRepository {
   }
 
   async findByDocumentId(documentId: string): Promise<AgentRequestResponse | null> {
-    const doc = await (postgresClient as any).document.findUnique({ where: { documentId } });
+    const doc = await postgresClient.document.findUnique({ where: { id: documentId } });
     if (!doc) return null;
-    const app = await (postgresClient as any).loanApplication.findUnique({ where: { id: doc.loanApplicationId } });
+    const app = await postgresClient.loanApplication.findUnique({ where: { id: doc.loanApplicationId || '' } });
     if (!app) return null;
-    const user = await (postgresClient as any).user.findUnique({ where: { userId: app.userId } });
+    const user = await postgresClient.user.findUnique({ where: { userId: app.userId } });
     return this.mapToResponse(app, user || null);
   }
 
   async countSince(since?: Date): Promise<number> {
     const whereClause: any = {};
     if (since) whereClause.createdAt = { gte: since };
-    return await (postgresClient as any).loanApplication.count({ where: whereClause });
+    return await postgresClient.loanApplication.count({ where: whereClause });
   }
 
   async create(_data: Partial<AgentRequest>): Promise<AgentRequestResponse> {
@@ -207,14 +206,14 @@ export class AgentRequestRepository implements IAgentRequestRepository {
     return false;
   }
 
-  private mapToListResponse(application: any, user: any | null): Partial<AgentRequestResponse> {
+  private mapToListResponse(application: any, user: any | null): AgentRequestResponse {
     const basePersonal = user ? {
       cedula: user.identificacion ?? undefined,
       nombre: user.nombre ?? undefined,
       apellido: user.apellido ?? undefined,
       telefono: user.telefono ?? undefined,
       email: user.email ?? undefined,
-    } : {};
+    } : null;
 
     return {
       id: application.id,
@@ -222,13 +221,15 @@ export class AgentRequestRepository implements IAgentRequestRepository {
       status: application.status ?? 'pending',
       userId: application.userId,
       personalData: basePersonal,
+      documents: null,
       metadata: {
         completionPercentage: application.completionPercentage ?? undefined,
         faseActual: application.faseActual ?? undefined,
         tipoPrestamo: application.tipoPrestamo ?? undefined,
       },
-      createdAt: application.createdAt,
-      updatedAt: application.updatedAt,
+      createdAt: application.createdAt || new Date(),
+      updatedAt: application.updatedAt || new Date(),
+      completedAt: application.approvedAt ?? null,
     };
   }
 }
