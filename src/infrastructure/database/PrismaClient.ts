@@ -1,3 +1,4 @@
+// @ts-ignore - Prisma client is generated during build
 import { PrismaClient } from '@prisma-sqlserver/client';
 
 class DatabaseConnection {

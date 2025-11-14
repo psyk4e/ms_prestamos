@@ -1,5 +1,6 @@
 import { IAgentRequestRepository } from '../../domain/interfaces/IAgentRequestRepository';
 import { AgentRequest, AgentRequestFilter, AgentRequestResponse } from '../../domain/entities/AgentRequest';
+// @ts-ignore - Prisma client is generated during build
 import { PrismaClient as PostgresClient } from '@prisma-postgres/client';
 
 // Create PostgreSQL client instance
