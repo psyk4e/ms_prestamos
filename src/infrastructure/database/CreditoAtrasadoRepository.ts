@@ -94,7 +94,7 @@ export class CreditoAtrasadoRepository implements ICreditoAtrasadoRepository {
     `;
 
     const result = await prisma.$queryRawUnsafe<CreditoAtrasado[]>(baseQuery);
-    return result.map((item) => this.mapToDomain(item)).slice(0, 5);
+    return result.map((item: any) => this.mapToDomain(item)).slice(0, 5);
   }
 
   /**
@@ -153,7 +153,7 @@ export class CreditoAtrasadoRepository implements ICreditoAtrasadoRepository {
     const result = await prisma.$queryRawUnsafe<CreditoAtrasado[]>(dataQuery);
 
     return {
-      data: result.map((item) => this.mapToDomain(item)),
+      data: result.map((item: any) => this.mapToDomain(item)),
       total,
       page,
       limit,
