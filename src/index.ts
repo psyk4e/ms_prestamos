@@ -22,7 +22,6 @@ import { AgentRequestRepository } from './infrastructure/database/AgentRequestRe
 import { SentryLogService } from './infrastructure/services/SentryLogService';
 import { AzureBlobStorageService } from './infrastructure/services/AzureBlobStorageService';
 import { DatabaseConnection } from './infrastructure/database/PrismaClient';
-// @ts-ignore - Prisma client is generated during build
 import { PrismaClient as PostgresClient } from '@prisma-postgres/client';
 import { CreditoAtrasadoUseCase } from './application/use-cases/CreditoAtrasadoUseCase';
 import { AcuerdoPagoUseCase } from './application/usecases/AcuerdoPagoUseCase';

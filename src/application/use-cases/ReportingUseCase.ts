@@ -1,4 +1,3 @@
-// @ts-ignore - Prisma client is generated during build
 import { PrismaClient as PostgresClient } from '@prisma-postgres/client';
 import { ReportingService } from '../../infrastructure/services/ReportingService';
 import { CustomLogger } from '../../infrastructure/services/CustomLogger';
