@@ -17,21 +17,44 @@ export class AgentRequestRepository implements IAgentRequestRepository {
       nombre: user.nombre ?? undefined,
       apellido: user.apellido ?? undefined,
       cedula: user.identificacion ?? undefined,
+      tipoDocumento: user.tipoDocumento ?? undefined,
       telefono: user.telefonoPrincipal ?? undefined,
+      telefonoSecundario: user.telefonoSecundario ?? undefined,
       email: user.email ?? undefined,
+      fechaNacimiento: user.fechaNacimiento ?? undefined,
       direccion: user.direccion ?? undefined,
+      ciudad: user.ciudad ?? undefined,
+      provincia: user.provincia ?? undefined,
+      codigoPostal: user.codigoPostal ?? undefined,
       estadoCivil: user.estadoCivil ?? undefined,
       genero: user.genero ?? undefined,
       nacionalidad: user.nacionalidad ?? undefined,
       profesion: user.profesion ?? undefined,
       nivelEducativo: user.nivelEducativo ?? undefined,
+      ingresosMensuales: user.ingresosMensuales ? Number(user.ingresosMensuales) : undefined,
+      status: user.status ?? undefined,
+      externalClientId: user.externalClientId ?? undefined,
+      clientSource: user.clientSource ?? undefined,
     };
   }
 
-  private mapToResponse(application: any, user: any | null, personalDetail?: any | null, evaluation?: any | null, docs?: any[] | null): AgentRequestResponse {
+  private mapToResponse(application: any, user: any | null, personalDetail?: any | null, evaluation?: any | null, docs?: any[] | null, primaryAddress?: any | null): AgentRequestResponse {
     const basePersonal = this.buildPersonalData(user);
-    const enrichedPersonal = personalDetail ? {
+
+    // Agregar dirección primaria si existe
+    const personalWithAddress = primaryAddress ? {
       ...basePersonal,
+      direccionPrimaria: {
+        direccion: primaryAddress.direccion ?? undefined,
+        latitud: primaryAddress.latitud ? Number(primaryAddress.latitud) : undefined,
+        longitud: primaryAddress.longitud ? Number(primaryAddress.longitud) : undefined,
+        isPrimary: primaryAddress.isPrimary ?? undefined,
+        updatedAt: primaryAddress.updatedAt ?? undefined,
+      }
+    } : basePersonal;
+
+    const enrichedPersonal = personalDetail ? {
+      ...personalWithAddress,
       conyuge: {
         nombre: personalDetail.conyugeNombre ?? undefined,
         apellido: personalDetail.conyugeApellido ?? undefined,
@@ -46,33 +69,51 @@ export class AgentRequestRepository implements IAgentRequestRepository {
       personasDependientes: personalDetail.personasDependientes ?? undefined,
       tipoVivienda: personalDetail.tipoVivienda ?? undefined,
       tiempoResidenciaMeses: personalDetail.tiempoResidenciaMeses ?? undefined,
-    } : basePersonal;
+    } : personalWithAddress;
 
     const mappedDocs = (docs || []).map((d: any) => ({
       id: d.id,
       type: d.documentType,
       name: d.documentName,
-      // path: d.filePath ?? undefined,
-      // status: d.validationStatus ?? undefined,
-      // uploadedAt: d.uploadedAt ?? undefined,
-      // validatedAt: d.validatedAt ?? undefined,
-      // expiresAt: d.expiresAt ?? undefined,
+      path: d.filePath ?? undefined,
+      url: d.fileUrl ?? undefined,
+      status: d.validationStatus ?? undefined,
+      validationNotes: d.validationNotes ?? undefined,
+      uploadedAt: d.uploadedAt ?? undefined,
+      validatedAt: d.validatedAt ?? undefined,
+      expiresAt: d.expiresAt ?? undefined,
       mimeType: d.mimeType ?? undefined,
-      size: d.fileSize ?? undefined,
-      // required: d.isRequired ?? undefined,
+      size: d.fileSize ? Number(d.fileSize) : undefined,
+      required: d.isRequired ?? undefined,
+      createdAt: d.createdAt ?? undefined,
+      updatedAt: d.updatedAt ?? undefined,
     }));
 
+    // Metadata del préstamo
+    const prestamoMetadata = {
+      montoSolicitado: application.montoSolicitado ? Number(application.montoSolicitado) : undefined,
+      plazoMeses: application.plazoMeses ?? undefined,
+      periodoPago: application.periodoPago ?? undefined,
+      tiempoLaborandoMeses: application.tiempoLaborandoMeses ?? undefined,
+      salarioMensual: application.salarioMensual ? Number(application.salarioMensual) : undefined,
+      gastosMensuales: application.gastosMensuales ? Number(application.gastosMensuales) : undefined,
+    };
+
+    // Metadata de validación/evaluación
     const metaEval = evaluation ? {
-      evaluationScore: evaluation.evaluationScore ?? undefined,
+      evaluationScore: evaluation.evaluationScore ? Number(evaluation.evaluationScore) : undefined,
       riskLevel: evaluation.riskLevel ?? undefined,
       creditDecision: evaluation.creditDecision ?? undefined,
-      requestedAmount: evaluation.requestedAmount ?? undefined,
-      approvedAmount: evaluation.approvedAmount ?? undefined,
-      approvalPercentage: evaluation.approvalPercentage ?? undefined,
+      requestedAmount: evaluation.requestedAmount ? Number(evaluation.requestedAmount) : undefined,
+      approvedAmount: evaluation.approvedAmount ? Number(evaluation.approvedAmount) : undefined,
+      approvalPercentage: evaluation.approvalPercentage ? Number(evaluation.approvalPercentage) : undefined,
       evaluationType: evaluation.evaluationType ?? undefined,
       evaluationVersion: evaluation.evaluationVersion ?? undefined,
       evaluatedBy: evaluation.evaluatedBy ?? undefined,
       evaluationNotes: evaluation.evaluationNotes ?? undefined,
+      evaluationData: evaluation.evaluationData ?? undefined,
+      evaluatedAt: evaluation.createdAt ?? undefined,
+      updatedAt: evaluation.updatedAt ?? undefined,
     } : {};
 
     return {
@@ -83,12 +124,16 @@ export class AgentRequestRepository implements IAgentRequestRepository {
       personalData: enrichedPersonal,
       documents: mappedDocs.length ? mappedDocs : null,
       metadata: {
-        completionPercentage: application.completionPercentage ?? undefined,
+        completionPercentage: application.completionPercentage ? Number(application.completionPercentage) : undefined,
         autoActivationReady: application.autoActivationReady ?? undefined,
         faseActual: application.faseActual ?? undefined,
         bloqueActual: application.bloqueActual ?? undefined,
         tipoPrestamo: application.tipoPrestamo ?? undefined,
-        evaluation: metaEval,
+        prestamo: prestamoMetadata,
+        validation: metaEval,
+        // Fechas importantes de la solicitud
+        submittedAt: application.submittedAt ?? undefined,
+        rejectedAt: application.rejectedAt ?? undefined,
       },
       createdAt: application.createdAt,
       updatedAt: application.updatedAt,
@@ -132,14 +177,18 @@ export class AgentRequestRepository implements IAgentRequestRepository {
     const app = await postgresClient.loanApplication.findUnique({ where: { id } });
     if (!app) return null;
 
-    const [user, personalDetail, evaluation, docs] = await Promise.all([
+    const [user, personalDetail, evaluation, docs, primaryAddress] = await Promise.all([
       postgresClient.user.findUnique({ where: { userId: app.userId } }),
       postgresClient.personalDetail.findFirst({ where: { loanApplicationId: id }, orderBy: { updatedAt: 'desc' } }),
       postgresClient.creditEvaluation.findFirst({ where: { loanApplicationId: id, isActive: true }, orderBy: { updatedAt: 'desc' } }),
       postgresClient.document.findMany({ where: { loanApplicationId: id }, orderBy: { uploadedAt: 'desc' } }),
+      app.userId ? postgresClient.userAddress.findFirst({
+        where: { userId: app.userId, isPrimary: true },
+        orderBy: { updatedAt: 'desc' }
+      }) : null,
     ]);
 
-    return this.mapToResponse(app, user || null, personalDetail || null, evaluation || null, docs || []);
+    return this.mapToResponse(app, user || null, personalDetail || null, evaluation || null, docs || [], primaryAddress || null);
   }
 
   async findByExternalId(externalId: string): Promise<AgentRequestResponse | null> {
@@ -147,8 +196,16 @@ export class AgentRequestRepository implements IAgentRequestRepository {
     const tracking = Number(externalId);
     const app = await postgresClient.loanApplication.findFirst({ where: { trackingNumber: tracking } });
     if (!app) return null;
-    const user = await postgresClient.user.findUnique({ where: { userId: app.userId } });
-    return this.mapToResponse(app, user || null);
+
+    const [user, primaryAddress] = await Promise.all([
+      postgresClient.user.findUnique({ where: { userId: app.userId } }),
+      app.userId ? postgresClient.userAddress.findFirst({
+        where: { userId: app.userId, isPrimary: true },
+        orderBy: { updatedAt: 'desc' }
+      }) : null,
+    ]);
+
+    return this.mapToResponse(app, user || null, null, null, null, primaryAddress || null);
   }
 
   async findByStatus(status: string, page: number, limit: number): Promise<{ data: AgentRequestResponse[], total: number }> {
@@ -181,8 +238,16 @@ export class AgentRequestRepository implements IAgentRequestRepository {
     if (!doc) return null;
     const app = await postgresClient.loanApplication.findUnique({ where: { id: doc.loanApplicationId || '' } });
     if (!app) return null;
-    const user = await postgresClient.user.findUnique({ where: { userId: app.userId } });
-    return this.mapToResponse(app, user || null);
+
+    const [user, primaryAddress] = await Promise.all([
+      postgresClient.user.findUnique({ where: { userId: app.userId } }),
+      app.userId ? postgresClient.userAddress.findFirst({
+        where: { userId: app.userId, isPrimary: true },
+        orderBy: { updatedAt: 'desc' }
+      }) : null,
+    ]);
+
+    return this.mapToResponse(app, user || null, null, null, null, primaryAddress || null);
   }
 
   async countSince(since?: Date): Promise<number> {
@@ -215,6 +280,13 @@ export class AgentRequestRepository implements IAgentRequestRepository {
       email: user.email ?? undefined,
     } : null;
 
+    // Metadata básica del préstamo para listas
+    const prestamoMetadata = {
+      montoSolicitado: application.montoSolicitado ? Number(application.montoSolicitado) : undefined,
+      plazoMeses: application.plazoMeses ?? undefined,
+      periodoPago: application.periodoPago ?? undefined,
+    };
+
     return {
       id: application.id,
       externalId: application.trackingNumber?.toString?.() ?? application.id,
@@ -223,9 +295,10 @@ export class AgentRequestRepository implements IAgentRequestRepository {
       personalData: basePersonal,
       documents: null,
       metadata: {
-        completionPercentage: application.completionPercentage ?? undefined,
+        completionPercentage: application.completionPercentage ? Number(application.completionPercentage) : undefined,
         faseActual: application.faseActual ?? undefined,
         tipoPrestamo: application.tipoPrestamo ?? undefined,
+        prestamo: prestamoMetadata,
       },
       createdAt: application.createdAt || new Date(),
       updatedAt: application.updatedAt || new Date(),
