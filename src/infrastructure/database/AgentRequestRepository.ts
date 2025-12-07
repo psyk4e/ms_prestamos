@@ -11,6 +11,50 @@ const postgresClient = new PostgresClient({
 });
 
 export class AgentRequestRepository implements IAgentRequestRepository {
+  /**
+   * Converts a Long object (from database) to a number
+   * Handles both Long objects {low, high, unsigned} and regular numbers/BigInts
+   */
+  private convertLongToNumber(value: any): number | undefined {
+    if (value === null || value === undefined) return undefined;
+    
+    // If it's already a number or BigInt, convert directly
+    if (typeof value === 'number') return value;
+    if (typeof value === 'bigint') return Number(value);
+    
+    // If it's a string, try to parse it
+    if (typeof value === 'string') {
+      // Try parsing as JSON first (might be a Long object)
+      if (value.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(value);
+          if (parsed && typeof parsed === 'object' && 'low' in parsed) {
+            // Long object: value = low + (high * 0x100000000)
+            const low = parsed.low || 0;
+            const high = parsed.high || 0;
+            return low + (high * 0x100000000);
+          }
+        } catch {
+          // JSON parse failed, fall through to number conversion
+        }
+      }
+      // Try to parse as number
+      const num = Number(value);
+      return isNaN(num) ? undefined : num;
+    }
+    
+    // If it's an object with low/high properties (Long object)
+    if (value && typeof value === 'object' && 'low' in value) {
+      const low = value.low || 0;
+      const high = value.high || 0;
+      return low + (high * 0x100000000);
+    }
+    
+    // Try to convert to number
+    const num = Number(value);
+    return isNaN(num) ? undefined : num;
+  }
+
   private buildPersonalData(user: any | null): any {
     if (!user) return null;
     return {
@@ -83,7 +127,7 @@ export class AgentRequestRepository implements IAgentRequestRepository {
       validatedAt: d.validatedAt ?? undefined,
       expiresAt: d.expiresAt ?? undefined,
       mimeType: d.mimeType ?? undefined,
-      size: d.fileSize ? Number(d.fileSize) : undefined,
+      size: this.convertLongToNumber(d.fileSizeRaw || d.fileSize),
       required: d.isRequired ?? undefined,
       createdAt: d.createdAt ?? undefined,
       updatedAt: d.updatedAt ?? undefined,
@@ -177,18 +221,44 @@ export class AgentRequestRepository implements IAgentRequestRepository {
     const app = await postgresClient.loanApplication.findUnique({ where: { id } });
     if (!app) return null;
 
-    const [user, personalDetail, evaluation, docs, primaryAddress] = await Promise.all([
+    // Use raw SQL query for documents to handle Long object conversion in file_size
+    // The file_size might be stored as a JSON object (Long) or as a regular BigInt
+    const docsQuery = `
+      SELECT 
+        id,
+        user_id as "userId",
+        loan_application_id as "loanApplicationId",
+        document_type as "documentType",
+        document_name as "documentName",
+        file_path as "filePath",
+        file_url as "fileUrl",
+        file_size::text as "fileSizeRaw",
+        mime_type as "mimeType",
+        validation_status as "validationStatus",
+        validation_notes as "validationNotes",
+        is_required as "isRequired",
+        uploaded_at as "uploadedAt",
+        validated_at as "validatedAt",
+        expires_at as "expiresAt",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM documents
+      WHERE loan_application_id = $1::uuid
+      ORDER BY uploaded_at DESC
+    `;
+
+    const [user, personalDetail, evaluation, docsRaw, primaryAddress] = await Promise.all([
       postgresClient.user.findUnique({ where: { userId: app.userId } }),
       postgresClient.personalDetail.findFirst({ where: { loanApplicationId: id }, orderBy: { updatedAt: 'desc' } }),
       postgresClient.creditEvaluation.findFirst({ where: { loanApplicationId: id, isActive: true }, orderBy: { updatedAt: 'desc' } }),
-      postgresClient.document.findMany({ where: { loanApplicationId: id }, orderBy: { uploadedAt: 'desc' } }),
+      postgresClient.$queryRawUnsafe(docsQuery, id) as Promise<any[]>,
       app.userId ? postgresClient.userAddress.findFirst({
         where: { userId: app.userId, isPrimary: true },
         orderBy: { updatedAt: 'desc' }
       }) : null,
     ]);
 
-    return this.mapToResponse(app, user || null, personalDetail || null, evaluation || null, docs || [], primaryAddress || null);
+    return this.mapToResponse(app, user || null, personalDetail || null, evaluation || null, docsRaw || [], primaryAddress || null);
   }
 
   async findByExternalId(externalId: string): Promise<AgentRequestResponse | null> {
@@ -234,8 +304,34 @@ export class AgentRequestRepository implements IAgentRequestRepository {
   }
 
   async findByDocumentId(documentId: string): Promise<AgentRequestResponse | null> {
-    const doc = await postgresClient.document.findUnique({ where: { id: documentId } });
-    if (!doc) return null;
+    // Use raw SQL to handle Long object conversion in file_size
+    const docQuery = `
+      SELECT 
+        id,
+        user_id as "userId",
+        loan_application_id as "loanApplicationId",
+        document_type as "documentType",
+        document_name as "documentName",
+        file_path as "filePath",
+        file_url as "fileUrl",
+        file_size::text as "fileSizeRaw",
+        mime_type as "mimeType",
+        validation_status as "validationStatus",
+        validation_notes as "validationNotes",
+        is_required as "isRequired",
+        uploaded_at as "uploadedAt",
+        validated_at as "validatedAt",
+        expires_at as "expiresAt",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM documents
+      WHERE id = $1::uuid
+    `;
+    
+    const docsRaw = await postgresClient.$queryRawUnsafe(docQuery, documentId) as any[];
+    if (!docsRaw || docsRaw.length === 0) return null;
+    
+    const doc = docsRaw[0];
     const app = await postgresClient.loanApplication.findUnique({ where: { id: doc.loanApplicationId || '' } });
     if (!app) return null;
 
@@ -247,7 +343,7 @@ export class AgentRequestRepository implements IAgentRequestRepository {
       }) : null,
     ]);
 
-    return this.mapToResponse(app, user || null, null, null, null, primaryAddress || null);
+    return this.mapToResponse(app, user || null, null, null, [doc], primaryAddress || null);
   }
 
   async countSince(since?: Date): Promise<number> {
