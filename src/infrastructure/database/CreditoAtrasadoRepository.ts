@@ -133,23 +133,20 @@ export class CreditoAtrasadoRepository implements ICreditoAtrasadoRepository {
     }
 
     // Get total count with filtering
-    const countQuery = `
-      SELECT COUNT(*) as count FROM View_creditos_atrasados
-      ${whereClause}
-    `;
+    const countQuery = `SELECT COUNT(*) as count FROM View_creditos_atrasados ${whereClause}`;
     const totalResult = await prisma.$queryRawUnsafe<{ count: number }[]>(countQuery);
     const total = totalResult[0]?.count || 0;
 
     // Get paginated data with filtering
     const dataQuery = `
-      SELECT num_credito as [creditoId], cod_cliente as [clienteId], CLIENTE as [nombre], CANT_CUOTAS as [cuotasVencidas],'Notificación de atraso en cuota' AS [concepto], DESDE as [desde], Saldo AS [ponerseAlDia],
+      SELECT num_credito as [creditoId], cod_cliente as [clienteId], CLIENTE as [nombre], CANT_CUOTAS as [cuotasVencidas],'Notificación de atraso en cuota' AS [concepto], DESDE as [desde], SaldoPonerseAlDia AS [ponerseAlDia],
       '18296035518' as [phoneNumber]
       FROM View_creditos_atrasados
       ${whereClause}
       ORDER BY num_credito
       OFFSET ${offset} ROWS
       FETCH NEXT ${limit} ROWS ONLY
-    `;
+    `; //TODO colocar el numero real de la persona
     const result = await prisma.$queryRawUnsafe<CreditoAtrasado[]>(dataQuery);
 
     return {
