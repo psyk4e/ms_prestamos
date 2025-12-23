@@ -3,11 +3,14 @@ import { CreditoAtrasadoValidator } from '../../application/validators/CreditoAt
 import { IWebhookLogService } from '../../domain/interfaces/IWebhookLogService';
 import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 import { CreditoAtrasadoUseCase } from '../../application/use-cases/CreditoAtrasadoUseCase';
+import { AgentRequestUseCase } from '../../application/use-cases/AgentRequestUseCase';
+import { LoanDecisionValidator } from '../../application/validators/LoanDecisionValidator';
 
 export class WebhookController {
   constructor(
     private readonly creditoUseCase: CreditoAtrasadoUseCase,
-    private readonly webhookLogService: IWebhookLogService
+    private readonly webhookLogService: IWebhookLogService,
+    private readonly agentRequestUseCase: AgentRequestUseCase
   ) { }
 
   // GET /webhook/credito/:numCredito
@@ -315,5 +318,110 @@ export class WebhookController {
 
     await this.logResponse(req, response, false);
     res.status(500).json(response);
+  }
+
+  /**
+   * POST /webhook/loan-decision - Processes a loan decision (approve/reject)
+   * @param req - Express request object with loan decision data in body
+   * @param res - Express response object
+   */
+  processLoanDecision = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      // Get approvedBy from header (priority) or body
+      const approvedByHeader = req.headers['x-approved-by'] as string;
+      const requestBody = { ...req.body };
+      if (approvedByHeader) {
+        requestBody.approvedBy = approvedByHeader;
+      }
+
+      // Validate and transform request data
+      const validatedData = LoanDecisionValidator.validateLoanDecision(requestBody);
+
+      // Log the request (without approvedBy in sensitive logs)
+      await this.logRequest(req, {
+        request: {
+          loanApplicationId: validatedData.loanApplicationId,
+          approved: validatedData.approved,
+          comentario: validatedData.comentario,
+          approvedBy: validatedData.approvedBy ? '***masked***' : undefined
+        }
+      });
+
+      // Process loan decision using use case
+      const result = await this.agentRequestUseCase.processLoanDecision({
+        loanApplicationId: validatedData.loanApplicationId,
+        approved: validatedData.approved,
+        comentario: validatedData.comentario,
+        approvedBy: validatedData.approvedBy
+      });
+
+      if (!result.success) {
+        const response = {
+          success: false,
+          data: {
+            message: result.message,
+            error: result.error,
+          },
+          timestamp: new Date().toISOString()
+        };
+
+        await this.logResponse(req, response, false);
+
+        // Determine appropriate status code based on error type
+        let statusCode = 422;
+        if (result.error === 'LOAN_APPLICATION_NOT_FOUND') {
+          statusCode = 404;
+        } else if (result.error === 'STATUS_IMMUTABLE') {
+          statusCode = 409; // Conflict
+        } else if (result.error === 'NO_ACTIVE_EVALUATION' || result.error === 'USER_DATA_NOT_FOUND' || result.error === 'PHONE_NUMBER_NOT_FOUND') {
+          statusCode = 400; // Bad Request
+        }
+
+        res.status(statusCode).json(response);
+        return;
+      }
+
+      const response = {
+        success: true,
+        message: result.message,
+        data: result.data,
+        timestamp: new Date().toISOString()
+      };
+
+      await this.logResponse(req, response, true);
+      res.status(200).json(response);
+    } catch (error) {
+      // Handle validation errors specifically
+      if (error instanceof Error && error.message.startsWith('Validation error:')) {
+        const response = {
+          success: false,
+          message: 'Validation failed',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        };
+
+        await this.logResponse(req, response, false);
+        res.status(422).json(response);
+        return;
+      }
+
+      await this.handleError(req, res, error);
+    }
+  };
+
+  private async logRequest(req: AuthenticatedRequest, requestData: object): Promise<void> {
+    try {
+      await this.webhookLogService.log({
+        endpoint: req.originalUrl,
+        method: req.method,
+        ip: req.ip || req.connection.remoteAddress || 'unknown',
+        userAgent: req.headers['user-agent'] || 'unknown',
+        authKey: '***masked***',
+        success: true,
+        request: JSON.stringify(requestData)
+      });
+    } catch (error) {
+      console.error('Error logging request:', error);
+    }
   }
 }
