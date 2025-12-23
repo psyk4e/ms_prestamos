@@ -168,6 +168,43 @@ Información general del servicio.
 #### `GET /api/v1/docs`
 Documentación completa de la API.
 
+### API Endpoints (Requieren Autenticación)
+
+#### `POST /api/v1/credit-evaluation`
+Evalúa un perfil crediticio y calcula los detalles del préstamo con cuotas que incluyen intereses.
+
+**Documentación completa:** Ver [docs/credit-evaluation-api.md](./docs/credit-evaluation-api.md)
+
+**Ejemplo:**
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "x-auth-key: webhook_secret_key_2025" \
+  -d '{
+    "profile": {
+      "nombre": "Juan Pérez",
+      "tipoDocumento": "cedula",
+      "numeroDocumento": "12345678901",
+      "fechaNacimiento": "1990-05-15",
+      "tipoPrestamo": "personal",
+      "montoSolicitado": 150000,
+      "plazoMeses": 24,
+      "periodoPago": "mensual",
+      "ingresosMensuales": 60000,
+      "gastosMensuales": 25000,
+      "tiempoLaborando": 36
+    }
+  }' \
+  http://localhost:3000/api/v1/credit-evaluation
+```
+
+**Características:**
+- ✅ Evaluación crediticia basada en 5 factores ponderados
+- ✅ Cálculo dinámico de tasa de interés según score
+- ✅ Cálculo de cuotas con intereses usando fórmula de amortización francesa
+- ✅ Tabla de amortización completa
+- ✅ Determinación automática de monto aprobado
+
 ## 🏗️ Arquitectura
 
 El proyecto sigue la **Arquitectura en Capas (Onion Architecture)**:
