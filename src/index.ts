@@ -11,22 +11,26 @@ import { ApiRoutes } from './presentation/routes/ApiRoutes';
 import { AgentRequestRoutes } from './presentation/routes/AgentRequestRoutes';
 import { DocumentsRoutes } from './presentation/routes/DocumentsRoutes';
 import { ReportingRoutes } from './presentation/routes/ReportingRoutes';
+import { CreditEvaluationRoutes } from './presentation/routes/CreditEvaluationRoutes';
 import { WebhookController } from './presentation/controllers/WebhookController';
 import { AcuerdoPagoController } from './presentation/controllers/AcuerdoPagoController';
 import { AgentRequestController } from './presentation/controllers/AgentRequestController';
 import { DocumentsController } from './presentation/controllers/DocumentsController';
 import { ReportingController } from './presentation/controllers/ReportingController';
+import { CreditEvaluationController } from './presentation/controllers/CreditEvaluationController';
 import { CreditoAtrasadoRepository } from './infrastructure/database/CreditoAtrasadoRepository';
 import { AcuerdoPagoRepository } from './infrastructure/database/AcuerdoPagoRepository';
 import { AgentRequestRepository } from './infrastructure/database/AgentRequestRepository';
 import { SentryLogService } from './infrastructure/services/SentryLogService';
 import { AzureBlobStorageService } from './infrastructure/services/AzureBlobStorageService';
+import { N8nWebhookService } from './infrastructure/services/N8nWebhookService';
 import { DatabaseConnection } from './infrastructure/database/PrismaClient';
 import { PrismaClient as PostgresClient } from '@prisma-postgres/client';
 import { CreditoAtrasadoUseCase } from './application/use-cases/CreditoAtrasadoUseCase';
 import { AcuerdoPagoUseCase } from './application/usecases/AcuerdoPagoUseCase';
 import { AgentRequestUseCase } from './application/use-cases/AgentRequestUseCase';
 import { ReportingUseCase } from './application/use-cases/ReportingUseCase';
+import { CreditEvaluationUseCase } from './application/use-cases/CreditEvaluationUseCase';
 import { ReportingService } from './infrastructure/services/ReportingService';
 import { logger } from './infrastructure/services/CustomLogger';
 
@@ -76,20 +80,23 @@ class App {
     const agentRequestRepository = new AgentRequestRepository();
     const azureBlobStorageService = new AzureBlobStorageService();
     const reportingService = new ReportingService();
+    const n8nWebhookService = new N8nWebhookService();
 
     // Capa de aplicación
     const creditoAtrasadoUseCase = new CreditoAtrasadoUseCase(creditoRepository);
     const acuerdoPagoUseCase = new AcuerdoPagoUseCase(acuerdoPagoRepository);
-    const agentRequestUseCase = new AgentRequestUseCase(agentRequestRepository);
+    const agentRequestUseCase = new AgentRequestUseCase(agentRequestRepository, n8nWebhookService);
     const reportingUseCase = new ReportingUseCase(postgresClient, reportingService, logger);
+    const creditEvaluationUseCase = new CreditEvaluationUseCase();
 
     // Capa de presentación
     const authMiddleware = new AuthMiddleware(webhookLogService);
-    const webhookController = new WebhookController(creditoAtrasadoUseCase, webhookLogService);
+    const webhookController = new WebhookController(creditoAtrasadoUseCase, webhookLogService, agentRequestUseCase);
     const acuerdoPagoController = new AcuerdoPagoController(acuerdoPagoUseCase, webhookLogService);
     const agentRequestController = new AgentRequestController(agentRequestUseCase, webhookLogService, azureBlobStorageService);
     const documentsController = new DocumentsController(webhookLogService);
     const reportingController = new ReportingController(reportingUseCase, logger);
+    const creditEvaluationController = new CreditEvaluationController(creditEvaluationUseCase, webhookLogService);
 
     // Rutas
     const webhookRoutes = new WebhookRoutes(webhookController, acuerdoPagoController, authMiddleware);
@@ -97,6 +104,7 @@ class App {
     const agentRequestRoutes = new AgentRequestRoutes(agentRequestController, authMiddleware);
     const documentsRoutes = new DocumentsRoutes(documentsController, authMiddleware);
     const reportingRoutes = new ReportingRoutes(reportingController, authMiddleware);
+    const creditEvaluationRoutes = new CreditEvaluationRoutes(creditEvaluationController, authMiddleware);
 
     // Registrar rutas
     this.app.use('/webhook', webhookRoutes.getRouter());
@@ -104,6 +112,7 @@ class App {
     this.app.use('/api/v1/agent-requests', agentRequestRoutes.getRouter());
     this.app.use('/api/v1/documents', documentsRoutes.getRouter());
     this.app.use('/api/v1/reports', reportingRoutes.getRouter());
+    this.app.use('/api/v1/credit-evaluation', creditEvaluationRoutes.getRouter());
   }
 
   private initializeRoutes(): void {
