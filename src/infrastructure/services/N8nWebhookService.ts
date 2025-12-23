@@ -9,7 +9,6 @@ export interface N8nWebhookPayload {
   montoSolicitado: number;
   montoAprobado?: number;
   comentario?: string;
-  mensajeWhatsApp: string;
   trackingNumber: number;
   [key: string]: any;
 }

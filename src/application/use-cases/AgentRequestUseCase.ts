@@ -1,7 +1,6 @@
 import { IAgentRequestRepository, LoanApplicationUpdateData } from '../../domain/interfaces/IAgentRequestRepository';
 import { AgentRequest, AgentRequestFilter, AgentRequestResponse } from '../../domain/entities/AgentRequest';
 import { logger } from '../../infrastructure/services/CustomLogger';
-import { WhatsAppMessageService } from '../../infrastructure/services/WhatsAppMessageService';
 import { N8nWebhookService } from '../../infrastructure/services/N8nWebhookService';
 
 export interface LoanDecisionRequest {
@@ -206,7 +205,7 @@ export class AgentRequestUseCase {
 
       await this.agentRequestRepository.updateLoanApplication(request.loanApplicationId, loanApplicationUpdate);
 
-      // Prepare notification payload (without approvedBy)
+      // Prepare notification payload (without approvedBy and mensajeWhatsApp - generated in n8n)
       const notificationPayload = {
         resultado: request.approved ? 'aprobado' : 'rechazado' as 'aprobado' | 'rechazado',
         loanApplicationId: request.loanApplicationId,
@@ -216,10 +215,7 @@ export class AgentRequestUseCase {
         montoSolicitado: loanApplication.metadata?.prestamo?.montoSolicitado || 0,
         montoAprobado: request.approved ? (loanApplication.metadata?.prestamo?.montoSolicitado || 0) : undefined,
         comentario: request.comentario,
-        trackingNumber: loanApplication.externalId ? parseInt(loanApplication.externalId, 10) : 0,
-        mensajeWhatsApp: request.approved
-          ? `¡Felicidades! Tu préstamo ha sido aprobado. Monto: $${loanApplication.metadata?.prestamo?.montoSolicitado || 0}`
-          : `Lamentamos informarte que tu solicitud de préstamo ha sido rechazada.${request.comentario ? ` Motivo: ${request.comentario}` : ''}`
+        trackingNumber: loanApplication.externalId ? parseInt(loanApplication.externalId, 10) : 0
       };
 
       // Send notification to N8n (without approvedBy)
