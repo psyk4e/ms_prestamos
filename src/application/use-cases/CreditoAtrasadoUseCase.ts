@@ -66,19 +66,24 @@ export class CreditoAtrasadoUseCase {
     filter?: CreditoAtrasadoFilter,
     notificationType?: 'early' | 'late'
   ): Promise<CreditoAtrasadoResponse[]> {
-    const creditos = await this.creditoRepository.findAll(filter, notificationType);
-    await logger.info('Retrieved all overdue credits', {
-      creditCount: creditos?.length || 0,
-      operation: 'getAllCreditos',
-      notificationType,
-      filter
-    });
+    try {
+      const creditos = await this.creditoRepository.findAll(filter, notificationType);
+      await logger.info('Retrieved all overdue credits', {
+        creditCount: creditos?.length || 0,
+        operation: 'getAllCreditos',
+        notificationType,
+        filter
+      });
 
-    if (!creditos) {
-      return [];
+      if (!creditos) {
+        return [];
+      }
+
+      return creditos.map(credito => this.mapToResponse(credito));
+    } catch (error) {
+      await logger.error('Error retrieving all overdue credits', error as Error);
+      throw new Error(`Failed to retrieve all overdue credits: ${(error as Error).message}`);
     }
-
-    return creditos.map(credito => this.mapToResponse(credito));
   }
 
   /**
