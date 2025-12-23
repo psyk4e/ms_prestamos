@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 import { AgentRequestUseCase } from '../../application/use-cases/AgentRequestUseCase';
 import { IWebhookLogService } from '../../domain/interfaces/IWebhookLogService';
 import { AgentRequestValidator } from '../../application/validators/AgentRequestValidator';
+import { LoanDecisionValidator } from '../../application/validators/LoanDecisionValidator';
 import { AzureBlobStorageService } from '../../infrastructure/services/AzureBlobStorageService';
 
 /**
@@ -512,5 +513,122 @@ export class AgentRequestController {
     });
 
     res.status(statusCode).json(response);
+  }
+
+  /**
+   * POST /api/v1/agent-requests/loan-decision - Processes a loan decision (approve/reject)
+   * @param req - Express request object with loan decision data in body
+   * @param res - Express response object
+   */
+  processLoanDecision = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      // Validate and transform request data
+      const validatedData = LoanDecisionValidator.validateLoanDecision(req.body);
+
+      // Log the request
+      await this.logRequest(req, {
+        request: validatedData
+      });
+
+      // Process loan decision using use case
+      const result = await this.agentRequestUseCase.processLoanDecision({
+        loanApplicationId: validatedData.loanApplicationId,
+        approved: validatedData.approved,
+        comentario: validatedData.comentario
+      });
+
+      if (!result.success) {
+        const response = {
+          success: false,
+          message: result.message,
+          error: result.error,
+          timestamp: new Date().toISOString()
+        };
+
+        await this.logResponse(req, response, false);
+
+        // Determine appropriate status code based on error type
+        let statusCode = 422;
+        if (result.error === 'LOAN_APPLICATION_NOT_FOUND') {
+          statusCode = 404;
+        } else if (result.error === 'STATUS_IMMUTABLE') {
+          statusCode = 409; // Conflict
+        } else if (result.error === 'NO_ACTIVE_EVALUATION' || result.error === 'USER_DATA_NOT_FOUND' || result.error === 'PHONE_NUMBER_NOT_FOUND') {
+          statusCode = 400; // Bad Request
+        }
+
+        res.status(statusCode).json(response);
+        return;
+      }
+
+      const response = {
+        success: true,
+        message: result.message,
+        data: result.data,
+        timestamp: new Date().toISOString()
+      };
+
+      await this.logResponse(req, response, true);
+      res.status(200).json(response);
+    } catch (error) {
+      // Handle validation errors specifically
+      if (error instanceof Error && error.message.startsWith('Validation error:')) {
+        const response = {
+          success: false,
+          message: 'Validation failed',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        };
+
+        await this.logResponse(req, response, false);
+        res.status(422).json(response);
+        return;
+      }
+
+      await this.sendError(req, res, 500, 'Internal Server Error', error instanceof Error ? error.message : 'An unexpected error occurred');
+    }
+  };
+
+  /**
+   * Logs the incoming request for audit purposes
+   * @param req - Express request object
+   * @param requestData - Request data to log
+   */
+  private async logRequest(req: AuthenticatedRequest, requestData: object): Promise<void> {
+    try {
+      await this.webhookLogService.log({
+        endpoint: req.originalUrl,
+        method: req.method,
+        ip: req.ip || req.connection.remoteAddress || 'unknown',
+        userAgent: req.headers['user-agent'] || 'unknown',
+        authKey: '***masked***',
+        success: true,
+        request: JSON.stringify(requestData)
+      });
+    } catch (error) {
+      console.error('Error logging request:', error);
+    }
+  }
+
+  /**
+   * Logs the response for audit purposes
+   * @param req - Express request object
+   * @param response - Response data to log
+   * @param success - Whether the operation was successful
+   */
+  private async logResponse(req: AuthenticatedRequest, response: object, success: boolean): Promise<void> {
+    try {
+      await this.webhookLogService.log({
+        endpoint: req.originalUrl,
+        method: req.method,
+        ip: req.ip || req.connection.remoteAddress || 'unknown',
+        userAgent: req.headers['user-agent'] || 'unknown',
+        authKey: '***masked***',
+        success,
+        response
+      });
+    } catch (error) {
+      console.error('Error logging response:', error);
+    }
   }
 }
