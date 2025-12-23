@@ -1,4 +1,4 @@
-import { IAgentRequestRepository } from '../../domain/interfaces/IAgentRequestRepository';
+import { IAgentRequestRepository, LoanApplicationUpdateData, CreditEvaluationUpdateData } from '../../domain/interfaces/IAgentRequestRepository';
 import { AgentRequest, AgentRequestFilter, AgentRequestResponse } from '../../domain/entities/AgentRequest';
 import { PrismaClient as PostgresClient } from '@prisma-postgres/client';
 
@@ -17,11 +17,11 @@ export class AgentRequestRepository implements IAgentRequestRepository {
    */
   private convertLongToNumber(value: any): number | undefined {
     if (value === null || value === undefined) return undefined;
-    
+
     // If it's already a number or BigInt, convert directly
     if (typeof value === 'number') return value;
     if (typeof value === 'bigint') return Number(value);
-    
+
     // If it's a string, try to parse it
     if (typeof value === 'string') {
       // Try parsing as JSON first (might be a Long object)
@@ -42,14 +42,14 @@ export class AgentRequestRepository implements IAgentRequestRepository {
       const num = Number(value);
       return isNaN(num) ? undefined : num;
     }
-    
+
     // If it's an object with low/high properties (Long object)
     if (value && typeof value === 'object' && 'low' in value) {
       const low = value.low || 0;
       const high = value.high || 0;
       return low + (high * 0x100000000);
     }
-    
+
     // Try to convert to number
     const num = Number(value);
     return isNaN(num) ? undefined : num;
@@ -327,10 +327,10 @@ export class AgentRequestRepository implements IAgentRequestRepository {
       FROM documents
       WHERE id = $1::uuid
     `;
-    
+
     const docsRaw = await postgresClient.$queryRawUnsafe(docQuery, documentId) as any[];
     if (!docsRaw || docsRaw.length === 0) return null;
-    
+
     const doc = docsRaw[0];
     const app = await postgresClient.loanApplication.findUnique({ where: { id: doc.loanApplicationId || '' } });
     if (!app) return null;
@@ -365,6 +365,90 @@ export class AgentRequestRepository implements IAgentRequestRepository {
   async delete(_id: string): Promise<boolean> {
     // Deleting loan applications through this endpoint is not supported
     return false;
+  }
+
+  /**
+   * Updates a loan application with new data
+   * @param id - Loan application UUID
+   * @param data - Update data for the loan application
+   */
+  async updateLoanApplication(id: string, data: LoanApplicationUpdateData): Promise<void> {
+    try {
+      const updateData: any = {
+        updatedAt: data.updatedAt || new Date()
+      };
+
+      if (data.status !== undefined) {
+        updateData.status = data.status;
+      }
+
+      if (data.approvedAt !== undefined) {
+        updateData.approvedAt = data.approvedAt;
+      }
+
+      if (data.rejectedAt !== undefined) {
+        updateData.rejectedAt = data.rejectedAt;
+      }
+
+      if (data.approvedBy !== undefined) {
+        updateData.approvedBy = data.approvedBy;
+      }
+
+      if (data.decisionComment !== undefined) {
+        updateData.decisionComment = data.decisionComment;
+      }
+
+      await postgresClient.loanApplication.update({
+        where: { id },
+        data: updateData
+      });
+    } catch (error) {
+      console.error('Error updating loan application:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Updates a credit evaluation with new decision data
+   * @param loanApplicationId - Loan application UUID
+   * @param data - Update data for the credit evaluation
+   */
+  async updateCreditEvaluation(loanApplicationId: string, data: CreditEvaluationUpdateData): Promise<void> {
+    try {
+      // Find the active credit evaluation for this loan application
+      const activeEvaluation = await postgresClient.creditEvaluation.findFirst({
+        where: {
+          loanApplicationId,
+          isActive: true
+        },
+        orderBy: { updatedAt: 'desc' }
+      });
+
+      if (!activeEvaluation) {
+        throw new Error(`No active credit evaluation found for loan application ${loanApplicationId}`);
+      }
+
+      const updateData: any = {
+        creditDecision: data.creditDecision,
+        updatedAt: data.updatedAt || new Date()
+      };
+
+      if (data.evaluationNotes !== undefined) {
+        updateData.evaluationNotes = data.evaluationNotes;
+      }
+
+      if (data.evaluatedBy !== undefined) {
+        updateData.evaluatedBy = data.evaluatedBy;
+      }
+
+      await postgresClient.creditEvaluation.update({
+        where: { id: activeEvaluation.id },
+        data: updateData
+      });
+    } catch (error) {
+      console.error('Error updating credit evaluation:', error);
+      throw error;
+    }
   }
 
   private mapToListResponse(application: any, user: any | null): AgentRequestResponse {
