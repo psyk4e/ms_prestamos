@@ -67,6 +67,12 @@ export class WebhookRoutes {
       this.webhookController.processLoanDecision
     );
 
+    // POST /webhook/credit-evaluation - Evaluar perfil crediticio
+    this.router.post(
+      '/credit-evaluation',
+      this.webhookController.evaluateCredit
+    );
+
     // Payment Agreement Routes
     // POST /webhook/acuerdos-pago - Create new payment agreement
     this.router.post(

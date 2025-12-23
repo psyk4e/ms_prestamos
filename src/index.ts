@@ -11,13 +11,11 @@ import { ApiRoutes } from './presentation/routes/ApiRoutes';
 import { AgentRequestRoutes } from './presentation/routes/AgentRequestRoutes';
 import { DocumentsRoutes } from './presentation/routes/DocumentsRoutes';
 import { ReportingRoutes } from './presentation/routes/ReportingRoutes';
-import { CreditEvaluationRoutes } from './presentation/routes/CreditEvaluationRoutes';
 import { WebhookController } from './presentation/controllers/WebhookController';
 import { AcuerdoPagoController } from './presentation/controllers/AcuerdoPagoController';
 import { AgentRequestController } from './presentation/controllers/AgentRequestController';
 import { DocumentsController } from './presentation/controllers/DocumentsController';
 import { ReportingController } from './presentation/controllers/ReportingController';
-import { CreditEvaluationController } from './presentation/controllers/CreditEvaluationController';
 import { CreditoAtrasadoRepository } from './infrastructure/database/CreditoAtrasadoRepository';
 import { AcuerdoPagoRepository } from './infrastructure/database/AcuerdoPagoRepository';
 import { AgentRequestRepository } from './infrastructure/database/AgentRequestRepository';
@@ -91,12 +89,11 @@ class App {
 
     // Capa de presentación
     const authMiddleware = new AuthMiddleware(webhookLogService);
-    const webhookController = new WebhookController(creditoAtrasadoUseCase, webhookLogService, agentRequestUseCase);
+    const webhookController = new WebhookController(creditoAtrasadoUseCase, webhookLogService, agentRequestUseCase, creditEvaluationUseCase);
     const acuerdoPagoController = new AcuerdoPagoController(acuerdoPagoUseCase, webhookLogService);
     const agentRequestController = new AgentRequestController(agentRequestUseCase, webhookLogService, azureBlobStorageService);
     const documentsController = new DocumentsController(webhookLogService);
     const reportingController = new ReportingController(reportingUseCase, logger);
-    const creditEvaluationController = new CreditEvaluationController(creditEvaluationUseCase, webhookLogService);
 
     // Rutas
     const webhookRoutes = new WebhookRoutes(webhookController, acuerdoPagoController, authMiddleware);
@@ -104,7 +101,6 @@ class App {
     const agentRequestRoutes = new AgentRequestRoutes(agentRequestController, authMiddleware);
     const documentsRoutes = new DocumentsRoutes(documentsController, authMiddleware);
     const reportingRoutes = new ReportingRoutes(reportingController, authMiddleware);
-    const creditEvaluationRoutes = new CreditEvaluationRoutes(creditEvaluationController, authMiddleware);
 
     // Registrar rutas
     this.app.use('/webhook', webhookRoutes.getRouter());
@@ -112,7 +108,6 @@ class App {
     this.app.use('/api/v1/agent-requests', agentRequestRoutes.getRouter());
     this.app.use('/api/v1/documents', documentsRoutes.getRouter());
     this.app.use('/api/v1/reports', reportingRoutes.getRouter());
-    this.app.use('/api/v1/credit-evaluation', creditEvaluationRoutes.getRouter());
   }
 
   private initializeRoutes(): void {

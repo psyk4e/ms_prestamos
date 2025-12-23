@@ -5,12 +5,15 @@ import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 import { CreditoAtrasadoUseCase } from '../../application/use-cases/CreditoAtrasadoUseCase';
 import { AgentRequestUseCase } from '../../application/use-cases/AgentRequestUseCase';
 import { LoanDecisionValidator } from '../../application/validators/LoanDecisionValidator';
+import { CreditEvaluationUseCase } from '../../application/use-cases/CreditEvaluationUseCase';
+import { CreditEvaluationValidator } from '../../application/validators/CreditEvaluationValidator';
 
 export class WebhookController {
   constructor(
     private readonly creditoUseCase: CreditoAtrasadoUseCase,
     private readonly webhookLogService: IWebhookLogService,
-    private readonly agentRequestUseCase: AgentRequestUseCase
+    private readonly agentRequestUseCase: AgentRequestUseCase,
+    private readonly creditEvaluationUseCase: CreditEvaluationUseCase
   ) { }
 
   // GET /webhook/credito/:numCredito
@@ -424,4 +427,80 @@ export class WebhookController {
       console.error('Error logging request:', error);
     }
   }
+
+  /**
+   * POST /webhook/credit-evaluation - Evalúa un perfil crediticio
+   * @param req - Express request object with credit evaluation data in body
+   * @param res - Express response object
+   */
+  evaluateCredit = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      // Validar datos de entrada
+      const validatedData = CreditEvaluationValidator.validateCreditEvaluationRequest(req.body);
+
+      // Ejecutar evaluación
+      const result = await this.creditEvaluationUseCase.evaluateCreditProfile(validatedData.profile);
+
+      // Log de la operación
+      await this.webhookLogService.log({
+        endpoint: req.originalUrl,
+        method: req.method,
+        success: result.success,
+        ip: req.ip || 'unknown',
+        userAgent: req.get('User-Agent') || 'unknown',
+        response: {
+          approved: result.data?.evaluacion.decision === 'APROBADO',
+          score: result.data?.evaluacion.puntuacion,
+          riskLevel: result.data?.evaluacion.nivelRiesgo
+        }
+      });
+
+      if (!result.success) {
+        const response = {
+          success: false,
+          error: result.error,
+          timestamp: new Date().toISOString()
+        };
+
+        await this.logResponse(req, response, false);
+        res.status(400).json(response);
+        return;
+      }
+
+      const response = {
+        success: true,
+        data: result.data,
+        timestamp: new Date().toISOString()
+      };
+
+      await this.logResponse(req, response, true);
+      res.status(200).json(response);
+    } catch (error) {
+      // Handle validation errors specifically
+      if (error instanceof Error && error.message.startsWith('Validation error:')) {
+        const response = {
+          success: false,
+          error: 'Validation Error',
+          message: error.message,
+          timestamp: new Date().toISOString()
+        };
+
+        await this.logResponse(req, response, false);
+        res.status(400).json(response);
+        return;
+      }
+
+      // Log error
+      await this.webhookLogService.log({
+        endpoint: req.originalUrl,
+        method: req.method,
+        success: false,
+        ip: req.ip || 'unknown',
+        userAgent: req.get('User-Agent') || 'unknown',
+        response: { error: error instanceof Error ? error.message : 'Unknown error' }
+      });
+
+      await this.handleError(req, res, error);
+    }
+  };
 }
